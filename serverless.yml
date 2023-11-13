@@ -1,0 +1,26 @@
+service: cart-service
+
+plugins:
+  - serverless-offline
+  - serverless-dotenv-plugin
+  - serverless-plugin-common-excludes
+  - serverless-plugin-include-dependencies
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-1
+  stage: dev
+
+functions:
+  main:
+    handler: dist/main.handler
+    events:
+      - http:
+          method: ANY
+          path: /
+      - http:
+          method: ANY
+          path: '{proxy+}'

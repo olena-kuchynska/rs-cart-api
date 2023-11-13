@@ -1,21 +1,34 @@
 import { NestFactory } from '@nestjs/core';
-
-import * as helmet from 'helmet';
-
+import serverlessExpress from '@vendia/serverless-express';
+import { Callback, Context, Handler } from 'aws-lambda';
 import { AppModule } from './app.module';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-const port = process.env.PORT || 4000;
+let server: Handler;
 
-async function bootstrap() {
+async function bootstrap(): Promise<Handler> {
   const app = await NestFactory.create(AppModule);
+  const config = new DocumentBuilder()
+    .setTitle('Carts')
+    .setDescription('The Carts database API')
+    .setVersion('1.0')
+    .addServer('https://1l1gr4722m.execute-api.eu-west-1.amazonaws.com/dev')
+    .addServer('http://localhost:3000/dev')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
 
-  app.enableCors({
-    origin: (req, callback) => callback(null, true),
-  });
-  app.use(helmet());
+  await app.init();
 
-  await app.listen(port);
+  const expressApp = app.getHttpAdapter().getInstance();
+  return serverlessExpress({ app: expressApp });
 }
-bootstrap().then(() => {
-  console.log('App is running on %s port', port);
-});
+
+export const handler: Handler = async (
+  event: any,
+  context: Context,
+  callback: Callback,
+) => {
+  server = server ?? (await bootstrap());
+  return server(event, context, callback);
+};

@@ -2,38 +2,62 @@ import { Injectable } from '@nestjs/common';
 import { v4 } from 'uuid';
 
 import { Order } from '../models';
+import { InjectRepository } from '@nestjs/typeorm';
+import { OrderEntity } from 'src/database/entities/order.entity';
+import { DataSource, Repository } from 'typeorm';
+import { CartStatus } from 'src/enums/carts';
+import { CartEntity } from 'src/database/entities/carts.entity';
 
 @Injectable()
 export class OrderService {
-  private orders: Record<string, Order> = {}
+  constructor(
+    @InjectRepository(OrderEntity)
+    private orderRepository: Repository<OrderEntity>,
+    @InjectRepository(CartEntity)
+    private cartRepository: Repository<CartEntity>,
+    private dataSource: DataSource,
+  ) {}
 
-  findById(orderId: string): Order {
-    return this.orders[ orderId ];
+  async findById(id: string): Promise<OrderEntity> {
+    return this.orderRepository.findOneBy({ id });
   }
 
-  create(data: any) {
-    const id = v4(v4())
+  async create(data: Order): Promise<OrderEntity> {
+    const id = v4(v4());
     const order = {
       ...data,
       id,
-      status: 'inProgress',
+      status: CartStatus.Open,
     };
+    const newOrder = this.orderRepository.create(order);
 
-    this.orders[ id ] = order;
-
-    return order;
+    return this.orderRepository.save(newOrder);
   }
 
-  update(orderId, data) {
-    const order = this.findById(orderId);
+  async update(orderId: string, data): Promise<OrderEntity> {
+    try {
+      const order = await this.findById(orderId);
 
-    if (!order) {
-      throw new Error('Order does not exist.');
-    }
+      if (!order) {
+        throw new Error('Order does not exist.');
+      }
 
-    this.orders[ orderId ] = {
-      ...data,
-      id: orderId,
+      const updatedOrder = {
+        ...data,
+        id: orderId,
+      };
+
+      this.dataSource.transaction(async () => {
+        await this.orderRepository.update({ id: orderId }, updatedOrder);
+        await this.cartRepository.update(
+          { id: data.cartId },
+          { status: CartStatus.Ordered },
+        );
+      });
+
+      return updatedOrder;
+    } catch (error) {
+      return error;
     }
   }
 }
